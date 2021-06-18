@@ -172,32 +172,7 @@ SUITESPARSE_VERSION = 5.10.1
     LDLIBS ?= -lm
     LDFLAGS += -L$(INSTALL_LIB)
 
-    # NOTE: Use of the Intel MKL BLAS is strongly recommended.  The OpenBLAS can
-    # result in severe performance degradation, in CHOLMOD in particular.
-    # This script can also detect if the Intel MKL BLAS is installed.
-
-    ifndef BLAS
-        ifdef MKLROOT
-            # use the Intel MKL for BLAS and LAPACK
-            # using static linking:
-            # BLAS = -Wl,--start-group \
-            #   $(MKLROOT)/lib/intel64/libmkl_intel_lp64.a \
-            #   $(MKLROOT)/lib/intel64/libmkl_core.a \
-            #   $(MKLROOT)/lib/intel64/libmkl_intel_thread.a \
-            #   -Wl,--end-group -lpthread -lm
-            # using dynamic linking:
-            ifeq ($(UNAME),Linux)
-                BLAS ?= -lmkl_intel_lp64 -lmkl_core -lmkl_intel_thread -liomp5 -lpthread -lm
-                LAPACK ?=
-            endif
-        else
-            BLAS ?= -lblas
-            LAPACK ?= -llapack
-        endif
-    endif
-
-    # For ACML, use this instead:
-    #   make BLAS='-lacml -lgfortran'
+    # For BLAS/LAPACK configuration, see System-dependent configurations below
 
     #---------------------------------------------------------------------------
     # shell commands
@@ -352,6 +327,13 @@ SUITESPARSE_VERSION = 5.10.1
 # System-dependent configurations
 #===============================================================================
 
+    # NOTE: Use of the Intel MKL BLAS is strongly recommended.  The OpenBLAS can
+    # result in severe performance degradation, in CHOLMOD in particular.
+    # This script can also detect if the Intel MKL BLAS is installed.
+
+    # For ACML, use:
+    #   make BLAS='-lacml -lgfortran'
+
     #---------------------------------------------------------------------------
     # Linux
     #---------------------------------------------------------------------------
@@ -359,6 +341,24 @@ SUITESPARSE_VERSION = 5.10.1
     ifeq ($(UNAME),Linux)
         # add the realtime library, librt, and SuiteSparse/lib
         LDLIBS += -lrt -Wl,-rpath=$(INSTALL_LIB)
+
+        ifndef BLAS
+            ifdef MKLROOT
+                # use the Intel MKL for BLAS and LAPACK
+                # using static linking:
+                # BLAS = -Wl,--start-group \
+                #   $(MKLROOT)/lib/intel64/libmkl_intel_lp64.a \
+                #   $(MKLROOT)/lib/intel64/libmkl_core.a \
+                #   $(MKLROOT)/lib/intel64/libmkl_intel_thread.a \
+                #   -Wl,--end-group -lpthread -lm
+                # using dynamic linking:
+                BLAS ?= -lmkl_intel_lp64 -lmkl_core -lmkl_intel_thread -liomp5 -lpthread -lm
+                LAPACK ?=
+            else
+                BLAS ?= -lblas
+                LAPACK ?= -llapack
+            endif
+        endif
     endif
 
     #---------------------------------------------------------------------------
@@ -366,15 +366,25 @@ SUITESPARSE_VERSION = 5.10.1
     #---------------------------------------------------------------------------
 
     ifeq ($(UNAME), Darwin)
-        # To compile on the Mac, you must install Xcode.  Then do this at the
-        # command line in the Terminal, before doing 'make':
-        # xcode-select --install
-        CF += -fno-common
-        BLAS ?= -framework Accelerate
-        LAPACK ?= -framework Accelerate
         # OpenMP is not yet supported by default in clang
         CFOPENMP =
-        LDLIBS += -rpath $(INSTALL_LIB)
+        ifdef CONDA_PREFIX
+            # Conda does not set MKLROOT but assume MKL is installed
+            CF +=  -fno-common -I$(CONDA_PREFIX)/include
+            BLAS ?= -lmkl_intel_lp64 -lmkl_core -lmkl_intel_thread -liomp5 -lpthread -lm
+            LAPACK ?=
+            LDLIBS += -rpath $(INSTALL_LIB) -rpath $(CONDA_PREFIX)/lib
+            LDFLAGS += -L$(CONDA_PREFIX)/lib
+            MY_METIS_LIB := -lmetis  # in $CONDA_PREFIX/lib
+        else
+            # To compile on the Mac, you must install Xcode.  Then do this at the
+            # command line in the Terminal, before doing 'make':
+            # xcode-select --install
+            CF += -fno-common
+            BLAS ?= -framework Accelerate
+            LAPACK ?= -framework Accelerate
+            LDLIBS += -rpath $(INSTALL_LIB)
+        endif
     endif
 
     #---------------------------------------------------------------------------
